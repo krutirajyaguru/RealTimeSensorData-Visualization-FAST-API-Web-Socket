@@ -23,7 +23,7 @@ app.mount("/static", StaticFiles(directory="frontend"), name="static")
 async def index():
     return FileResponse("frontend/index.html")
 
-CSV_PATH = "/Users/niyantmehta/Spiced/RealTimeSensorData/newSimpleUI/data/sensor_data.csv"
+CSV_PATH = "/Users/Spiced/RealTimeSensorData/newSimpleUI/data/sensor_data.csv"
 
 LABELS = ('x', 'y', 'z')
 GROUP_SIZE = len(LABELS)

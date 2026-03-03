@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Multi-View Object Visualization</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/arquero@latest"></script>
+  <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+
+  <style>
+    /* body {
+      margin: 0;
+      display: grid;
+      grid-template-columns: 50% 50%;
+      grid-template-rows: 50vh 50vh;
+    }
+    .plot {
+      width: 100%;
+      height: 100%;
+    } */
+  body {
+    margin: 0;
+    height: 100vh;
+    display: grid;
+    grid-template-rows: 60vh 40vh;   /* 3D big, 2D small */
+  }
+
+  #top {
+    width: 100%;
+    height: 100%;
+  }
+
+  #bottom {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 4px;
+  }
+
+  .smallPlot {
+    width: 100%;
+    height: 100%;
+  }
+</style>
+
+</head>
+
+<body>
+
+<!-- <div id="xy" class="plot"></div>
+<div id="yz" class="plot"></div>
+<div id="xz" class="plot"></div>
+<div id="xyz" class="plot"></div> -->
+<div id="top"></div>
+
+<div id="bottom">
+  <div id="xy" class="smallPlot"></div>
+  <div id="yz" class="smallPlot"></div>
+  <div id="xz" class="smallPlot"></div>
+</div>
+
+<script type="module">
+
+/* ---------- COLOR MANAGEMENT ---------- */
+
+const COLOR_PALETTE = [
+  "#1f77b4","#ff7f0e","#2ca02c","#d62728",
+  "#9467bd","#8c564b","#e377c2","#7f7f7f",
+  "#bcbd22","#17becf","#aec7e8","#ffbb78",
+  "#98df8a","#ff9896","#c5b0d5","#c49c94"
+];
+
+const colorByObject = {};
+let colorIndex = 0;
+
+function getColor(obj) {
+  if (!(obj in colorByObject)) {
+    colorByObject[obj] = COLOR_PALETTE[colorIndex % COLOR_PALETTE.length];
+    colorIndex++;
+  }
+  return colorByObject[obj];
+}
+
+/* ---------- TRACE STORAGE ---------- */
+
+const tracesXY = {};
+const tracesYZ = {};
+const tracesXZ = {};
+const tracesXYZ = {};
+
+/* ---------- FIXED LAYOUTS ---------- */
+
+const layout2D = {
+  title: "2D View",   
+  xaxis: { range: [0,1], autorange: false },
+  yaxis: { range: [0,1], autorange: false },
+  uirevision: "lock"
+};
+
+const layout3D = {
+  title: "3D View (X, Y, Z)", 
+
+  scene: {
+    xaxis: { range: [0,1], autorange: false },
+    yaxis: { range: [0,1], autorange: false },
+    zaxis: { range: [0,1], autorange: false },
+    aspectmode: "cube"
+  },
+  uirevision: "lock"
+};
+
+Plotly.newPlot("xy", [], layout2D, {responsive: true});
+Plotly.newPlot("yz", [], layout2D, {responsive: true});
+Plotly.newPlot("xz", [], layout2D, {responsive: true});
+// Plotly.newPlot("xyz", [], layout3D, {responsive: true});
+Plotly.newPlot("top", [], layout3D, {responsive: true});
+
+// Click legend → hides object in all 4 plots
+// document.getElementById("xyz")
+//   .on('plotly_legendclick', function(event) {
+
+//     const objName = event.data[event.curveNumber].name;
+
+//     const visible =
+//       event.data[event.curveNumber].visible === true ||
+//       event.data[event.curveNumber].visible === undefined
+//         ? "legendonly"
+//         : true;
+
+//     // Apply same visibility to all traces
+//     ["xy", "yz", "xz"].forEach(id => {
+//       Plotly.restyle(id, { visible: visible }, 
+//         Object.values(window["traces" + id.toUpperCase()])
+//           .findIndex(t => t.name === objName)
+//       );
+//     });
+
+//     return true;
+// });
+
+
+
+/* ---------- WEBSOCKET ---------- */
+
+const ws = new WebSocket(`ws://${window.location.hostname}:8000/ws/stream`);
+ws.binaryType = "arraybuffer";
+
+ws.onmessage = (event) => {
+
+  const table = aq.fromArrow(event.data);
+
+  const objs = table.array("objects");
+  const xs   = table.array("x");
+  const ys   = table.array("y");
+  const zs   = table.array("z");
+
+  objs.forEach((obj, i) => {
+
+    const color = getColor(obj);
+
+    // XY
+    tracesXY[obj] = {
+      x: [xs[i]],
+      y: [ys[i]],
+      mode: "markers",
+      type: "scatter",
+      name: obj,
+      marker: { size: 6, color: color },
+      showlegend: false
+    };
+
+    // YZ
+    tracesYZ[obj] = {
+      x: [ys[i]],
+      y: [zs[i]],
+      mode: "markers",
+      type: "scatter",
+      name: obj,
+      marker: { size: 6, color: color },
+      showlegend: false
+    };
+
+    // XZ
+    tracesXZ[obj] = {
+      x: [xs[i]],
+      y: [zs[i]],
+      mode: "markers",
+      type: "scatter",
+      name: obj,
+      marker: { size: 6, color: color },
+      showlegend: false
+    };
+
+    // 3D
+    tracesXYZ[obj] = {
+      x: [xs[i]],
+      y: [ys[i]],
+      z: [zs[i]],
+      mode: "markers",
+      type: "scatter3d",
+      name: obj,
+      marker: { size: 4, color: color },
+      showlegend: true
+    };
+
+  });
+
+  Plotly.react("xy", Object.values(tracesXY), layout2D);
+  Plotly.react("yz", Object.values(tracesYZ), layout2D);
+  Plotly.react("xz", Object.values(tracesXZ), layout2D);
+  Plotly.react("top", Object.values(tracesXYZ), layout3D);
+};
+
+
+</script>
+</body>
+</html>
